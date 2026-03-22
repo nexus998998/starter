@@ -1,21 +1,25 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"starter/hash"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 var db *gorm.DB
+var cost = 12
 
 type users struct {
 	gorm.Model
 	Username string `gorm:"unique;not null"`
 	Password string `gorm:"not null"`
+	Email    string `gorm:"not null"`
 }
 
 type sessions struct {
@@ -75,18 +79,19 @@ func authenticate(c *fiber.Ctx) error {
 
 func login(username string, password string) (string, error) {
 	var user users
-	hashedPassword, err := hash.HashString(password)
 
-	if err != nil {
-		return "", err
-	}
-
-	results := db.Select("id").Where("username = ? AND password = ?", username, hashedPassword).First(&user)
+	results := db.Select("id", "password").Where("username = ? ", username).First(&user)
 	if results.Error != nil {
 		if results.Error == gorm.ErrRecordNotFound {
 			return "", results.Error
 		}
 		return "", results.Error
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+
+	if err != nil {
+		return "", err
 	}
 
 	sessionID, err := hash.GenerateRandomString(12)
@@ -111,7 +116,7 @@ func login(username string, password string) (string, error) {
 
 func signup(username string, password string) (string, error) {
 
-	hashedPassword, err := hash.HashString(password)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 
 	if err != nil {
 		return "", err
@@ -119,7 +124,7 @@ func signup(username string, password string) (string, error) {
 
 	user := users{
 		Username: username,
-		Password: hashedPassword,
+		Password: string(hashedPassword),
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -188,7 +193,7 @@ func main() {
 		sessionID, err := login(username, password)
 
 		if err != nil {
-			if err == gorm.ErrRecordNotFound {
+			if err == gorm.ErrRecordNotFound || errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 				return c.Redirect("/login?message=username+or+password+is+not+correct+!", fiber.StatusFound)
 			}
 			fmt.Println(err)
