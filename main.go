@@ -24,6 +24,16 @@ type sessions struct {
 	UserID    int
 }
 
+func containsSpace(s string) bool {
+	for _, char := range s {
+		if char == rune(' ') {
+			return true
+		}
+	}
+
+	return false
+}
+
 func authenticate(c *fiber.Ctx) error {
 	sessionID := c.Cookies("sessionID")
 
@@ -99,11 +109,54 @@ func login(username string, password string) (string, error) {
 	return sessionID, nil
 }
 
+func signup(username string, password string) (string, error) {
+
+	hashedPassword, err := hash.HashString(password)
+
+	if err != nil {
+		return "", err
+	}
+
+	user := users{
+		Username: username,
+		Password: hashedPassword,
+	}
+
+	if err := db.Create(&user).Error; err != nil {
+		return "", err
+	}
+
+	sessionID, err := hash.GenerateRandomString(12)
+
+	if err != nil {
+		return "", err
+	}
+
+	hashedSessionID, err := hash.HashString(sessionID)
+
+	if err != nil {
+		return "", err
+	}
+
+	session := sessions{
+		UserID:    int(user.ID),
+		SessionID: hashedSessionID,
+	}
+
+	if err := db.Create(&session).Error; err != nil {
+		return "", err
+	}
+
+	return sessionID, nil
+}
+
 func main() {
 
 	var err error
 
-	db, err = gorm.Open(postgres.Open("host=localhost port=5432 password=locally dbname=starter user=postgres"), &gorm.Config{})
+	db, err = gorm.Open(postgres.Open("host=localhost port=5432 password=locally dbname=starter user=postgres"), &gorm.Config{
+		TranslateError: true,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -118,28 +171,15 @@ func main() {
 	fmt.Println("running")
 
 	app.Post("/login", func(c *fiber.Ctx) error {
+
 		username := c.FormValue("username")
 		password := c.FormValue("password")
 
-		if username == "" && password == "" {
+		if username == "" || password == "" {
 			return c.Redirect("/login?message=username+or+password+must+not+be+blank", fiber.StatusFound)
 		}
 
-		containsSpace := false
-
-		for _, char := range username {
-			if char == rune(' ') {
-				containsSpace = true
-			}
-		}
-
-		for _, char := range password {
-			if char == rune(' ') {
-				containsSpace = true
-			}
-		}
-
-		if containsSpace {
+		if containsSpace(username) || containsSpace(password) {
 			return c.Redirect("/login?message=username+or+password+must+not+contain+spaces+!", fiber.StatusFound)
 		}
 
@@ -169,6 +209,47 @@ func main() {
 		return c.Render("login", fiber.Map{
 			"ErrorMessage": c.Query("message", ""),
 		})
+	})
+
+	app.Get("/signup", func(c *fiber.Ctx) error {
+		return c.Render("signup", fiber.Map{
+			"ErrorMessage": c.Query("message", ""),
+		})
+	})
+
+	app.Post("/signup", func(c *fiber.Ctx) error {
+
+		username := c.FormValue("username")
+		password := c.FormValue("password")
+
+		if username == "" || password == "" {
+			return c.Redirect("/signup?message=username+or+password+must+not+be+blank", fiber.StatusFound)
+		}
+
+		if containsSpace(username) || containsSpace(password) {
+			return c.Redirect("/signup?message=username+or+password+must+not+contain+spaces+!", fiber.StatusFound)
+		}
+
+		fmt.Println(username, password)
+
+		sessionID, err := signup(username, password)
+
+		if err != nil {
+			if err == gorm.ErrDuplicatedKey {
+				return c.Redirect("/login?message=this+user+already+exists+,+do+you+want+to+login+?", fiber.StatusFound)
+			}
+			fmt.Println(err)
+			return err
+		}
+
+		c.Cookie(&fiber.Cookie{
+			Name:  "sessionID",
+			Value: sessionID,
+			// Expires:  time.Now().Add(365 * 60 * 60 * time.Second), uncomment on deployment
+			HTTPOnly: true,
+		})
+
+		return c.Redirect("/", fiber.StatusFound)
 	})
 
 	protected := app.Group("", authenticate)
