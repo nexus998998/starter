@@ -4,16 +4,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-func init() {
-	fmt.Println("hello world")
-}
 
 func GenerateRandomString(length int) (string, error) {
 	bytes := make([]byte, length)

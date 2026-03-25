@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -6,11 +5,9 @@
     <title>Document</title>
 </head>
 <body>
-    <form action="/login" method="post" >
-        <input type="email" placeholder="email" name="email">
-        <input type="text" placeholder="password" name="password">
+    <form action="/verify" method="post">
+        <input type="text" name="token" placeholder="verification code here pls">
         <input type="submit" value="submit">
-        <p>{{.ErrorMessage}}</p>
     </form>
 </body>
 </html>
