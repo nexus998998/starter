@@ -489,4 +489,19 @@ func main() {
 	})
 
 	app.Listen(":8080")
+
+	go func() {
+		for {
+			time.Sleep(20 * 60 * time.Second)
+			results := db.Where("expiree < ?", time.Now()).Delete(&token{})
+			if results.Error != nil {
+				panic(results.Error)
+			}
+			results = db.Where("expiree < ?", time.Now()).Delete(&sessions{})
+			if results.Error != nil {
+				panic(results.Error)
+
+			}
+		}
+	}()
 }
